@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Three.js Advanced Particle Interactive System</title>
+    <title>Z-Up Particle System</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #050505; color: white; font-family: 'Segoe UI', sans-serif; }
         #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
@@ -29,15 +29,15 @@
 
     <div id="loading">
         <div style="margin-bottom: 10px;">✨</div>
-        Loading AI Model and 3D Engine...
+        Initializing Z-Up Coordinate System...
     </div>
     <video id="video-input"></video>
     <div id="canvas-container"></div>
     <div class="instruction">
         <h3>🖐 Interaction Guide</h3>
-        <p>1. <b>Open Hand</b>: Particles Explode / Diffuse</p>
-        <p>2. <b>Close Hand (Fist)</b>: Particles Contract / Shrink</p>
-        <p>3. <b>Top Right Panel</b>: Change Model and Color</p>
+        <p>1. <b>Open Hand</b>: Particles Explode</p>
+        <p>2. <b>Close Hand</b>: Particles Contract</p>
+        <p>3. <b>Note</b>: Z-Axis is now VERTICAL (Up)</p>
     </div>
 
     <script type="module">
@@ -45,9 +45,9 @@
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 
-        // --- Global Configuration ---
+        // --- Configuration ---
         const PARTICLE_COUNT = 20000; 
-        const PARTICLE_SIZE = 0.04;
+        const PARTICLE_SIZE = 0.05;
         
         let scene, camera, renderer, particleSystem, geometry, material;
         let positions, targetPositions;
@@ -63,7 +63,6 @@
             speed: 0.06
         };
 
-        // --- Initialization Entry Point ---
         initThree();
         initParticles();
         initGUI();
@@ -76,8 +75,11 @@
             scene.fog = new THREE.FogExp2(0x050505, 0.02);
 
             camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.z = 6;
-            camera.position.y = 1;
+            
+            // --- CRITICAL FIX: Z-UP SYSTEM ---
+            camera.up.set(0, 0, 1); // Sets Z as the vertical axis
+            camera.position.set(0, -8, 4); // Move back in Y, up in Z to look down
+            camera.lookAt(0, 0, 0);
 
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
@@ -86,10 +88,7 @@
 
             const controls = new OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
-            controls.autoRotate = true;
-            controls.autoRotateSpeed = 0.5;
-
-            window.addEventListener('resize', onWindowResize);
+            controls.autoRotate = false; // We handle rotation manually
         }
 
         function initParticles() {
@@ -121,73 +120,80 @@
             calculateTargetPositions('heart');
         }
 
-        // --- Core: Advanced Geometry Generation Algorithms ---
+        // --- MATH REWRITTEN FOR Z-UP (Z is Height) ---
         function calculateTargetPositions(shape) {
             const positions = new Float32Array(PARTICLE_COUNT * 3);
             
+            // Helper: x, y, z (z is height)
             function setPos(i, x, y, z) {
                 positions[i*3] = x;
                 positions[i*3+1] = y;
                 positions[i*3+2] = z;
             }
 
+            let idx = 0;
+
             if (shape === 'heart') {
-                // 1. Solid 3D Heart (Rejection Sampling)
-                // Y-axis is vertical, ensure it's generated upright.
-                let i = 0;
-                while (i < PARTICLE_COUNT) {
-                    const x = (Math.random() - 0.5) * 3;
-                    const y = (Math.random() - 0.5) * 3;
-                    const z = (Math.random() - 0.5) * 3;
+                // Heart: Standing upright on Z-axis
+                while (idx < PARTICLE_COUNT) {
+                    const x = (Math.random() - 0.5) * 3; // Width
+                    const z = (Math.random() - 0.5) * 3; // Height (was y)
+                    const y = (Math.random() - 0.5) * 3; // Depth
                     
                     const xx = x * 1.1; 
+                    const zz = z * 1.1; // Height in math formula
                     const yy = y * 1.1;
-                    const zz = z * 1.1;
 
-                    const a = xx*xx + (9/4)*yy*yy + zz*zz - 1;
+                    // Heart formula (using z as "up" variable in the equation context)
+                    // (x^2 + 9/4z^2 + y^2 - 1)^3... 
+                    // Note: Usually heart is plotted on XY. Let's make it stand up.
+                    // We swap Y and Z in the standard formula.
                     
-                    if (a*a*a - xx*xx*zz*zz*zz - (9/80)*yy*yy*zz*zz*zz < 0) {
-                        // Y offset to make sure the tip is down and it's vertically centered.
-                        setPos(i, x * 1.5, y * 1.5 + 0.5, z * 1.5); 
-                        i++;
+                    const a = xx*xx + (9/4)*zz*zz + yy*yy - 1;
+                    
+                    if (a*a*a - xx*xx*yy*yy*yy - (9/80)*zz*zz*yy*yy*yy < 0) {
+                         // Swap Y and Z for visual verticality
+                         // x = Left/Right
+                         // y = Depth
+                         // z = Up
+                        setPos(idx, x * 1.5, y * 0.5, z * 1.5 + 0.5); 
+                        idx++;
                     }
                 }
 
             } else if (shape === 'flower') {
-                // 2. 3D Multi-layered Lotus/Rose
+                // Flower: Laying flat on XY plane, petals growing up in Z
                 const scale = 2;
                 for (let i = 0; i < PARTICLE_COUNT; i++) {
                     if (i < PARTICLE_COUNT * 0.15) {
-                        // Flower center - dense sphere
+                        // Center
                         const r = Math.random() * 0.5;
                         const theta = Math.random() * Math.PI * 2;
                         const phi = Math.acos(2 * Math.random() - 1);
                         setPos(i, r*Math.sin(phi)*Math.cos(theta), r*Math.sin(phi)*Math.sin(theta), r*Math.cos(phi));
                     } else {
-                        // Petals - parametric surface
                         const t = i / (PARTICLE_COUNT * 0.85);
                         const theta = i * 2.39996;
                         const r = Math.sqrt(t) * scale;
+                        const wave = Math.sin(theta * 7); 
                         
-                        const petalNum = 7;
-                        const wave = Math.sin(theta * petalNum); 
-                        let z = (r * r) * 0.3 + wave * 0.2 * r; // Petal height with some wave
+                        // Z is height
+                        let z = (r * r) * 0.3 + wave * 0.2 * r; 
 
                         const x = r * Math.cos(theta);
                         const y = r * Math.sin(theta);
                         
-                        setPos(i, x, z - 1, y); // Swap Y and Z to make it face upwards
+                        setPos(i, x, y, z - 1); 
                     }
                 }
 
             } else if (shape === 'solar') {
-                // 3. Solar System
+                // Solar System: Orbits on XY Plane
                 const sunCount = 2000;
                 const planetCounts = 300; 
                 const orbitCount = PARTICLE_COUNT - sunCount - (8 * planetCounts); 
-                let idx = 0;
 
-                // A. Sun
+                // Sun (Sphere)
                 for (let j = 0; j < sunCount; j++) {
                     const r = Math.random() * 0.8;
                     const theta = Math.random() * Math.PI * 2;
@@ -195,160 +201,151 @@
                     setPos(idx++, r*Math.sin(phi)*Math.cos(theta), r*Math.sin(phi)*Math.sin(theta), r*Math.cos(phi));
                 }
 
-                // B. Orbits and Planets
                 const radii = [1.2, 1.8, 2.5, 3.5, 5.5, 7.5, 9.5, 11.0];
 
                 for (let p = 0; p < 8; p++) {
                     const r = radii[p];
                     
-                    // 1. Orbits
+                    // Orbits (Flat on XY)
                     const ringParticles = Math.floor(orbitCount / 8);
                     for(let k=0; k<ringParticles; k++){
                         const angle = Math.random() * Math.PI * 2;
                         const radiusVar = r + (Math.random()-0.5) * 0.1;
-                        setPos(idx++, radiusVar * Math.cos(angle), (Math.random()-0.5)*0.05, radiusVar * Math.sin(angle));
+                        // Z is 0 (flat)
+                        setPos(idx++, radiusVar * Math.cos(angle), radiusVar * Math.sin(angle), (Math.random()-0.5)*0.05);
                     }
 
-                    // 2. Planets
+                    // Planets
                     const planetAngle = Math.random() * Math.PI * 2;
                     const px = r * Math.cos(planetAngle);
-                    const pz = r * Math.sin(planetAngle);
+                    const py = r * Math.sin(planetAngle);
                     
                     for(let k=0; k<planetCounts; k++){
-                        let pSize = (p === 4 || p === 5) ? 0.35 : (p === 0 ? 0.08 : 0.15);
-
+                        let pSize = (p === 4 || p === 5) ? 0.35 : 0.15;
                         const pr = Math.random() * pSize;
                         const pt = Math.random() * Math.PI * 2;
                         const pp = Math.acos(2 * Math.random() - 1);
                         
                         setPos(idx++, 
                             px + pr*Math.sin(pp)*Math.cos(pt), 
-                            pr*Math.sin(pp)*Math.sin(pt), 
-                            pz + pr*Math.cos(pp)
+                            py + pr*Math.sin(pp)*Math.sin(pt), 
+                            pr*Math.cos(pp) // Z offset
                         );
                     }
                 }
                 while(idx < PARTICLE_COUNT) setPos(idx++, 0,0,0);
 
-            } else if (shape === 'fireworks') {
-                // 4. Fireworks (Explosion Trails)
-                const trailCount = 80;
-                const particlesPerTrail = Math.floor(PARTICLE_COUNT / trailCount);
-                
-                let idx = 0;
-                for (let t = 0; t < trailCount; t++) {
-                    const theta = Math.random() * Math.PI * 2;
-                    const phi = Math.acos(2 * Math.random() - 1);
-                    const dx = Math.sin(phi) * Math.cos(theta);
-                    const dy = Math.sin(phi) * Math.sin(theta);
-                    const dz = Math.cos(phi);
+            } else if (shape === 'saturn') {
+                // Saturn: Tilted 45 degrees relative to Z-up
+                const coreParticles = Math.floor(PARTICLE_COUNT * 0.4);
+                const ringParticles = PARTICLE_COUNT - coreParticles;
+                const tiltAngle = Math.PI / 4; // 45 degrees
 
-                    const maxLen = 3 + Math.random() * 3;
-
-                    for (let p = 0; p < particlesPerTrail; p++) {
-                        const progress = p / particlesPerTrail; 
-                        const dist = progress * maxLen;
-                        
-                        const gravity = progress * progress * -1.5; 
-                        const scatter = 0.15 * progress;
-
-                        setPos(idx++, 
-                            dx * dist + (Math.random()-0.5)*scatter, 
-                            dy * dist + gravity + (Math.random()-0.5)*scatter, 
-                            dz * dist + (Math.random()-0.5)*scatter
-                        );
-                    }
-                }
-
-            } else if (shape === 'saturn') { // NEW: Saturn with 45 degree tilt
-                const coreParticles = Math.floor(PARTICLE_COUNT * 0.4); // 40% for core
-                const ringParticles = PARTICLE_COUNT - coreParticles; // 60% for ring
-                const coreRadius = 1.5;
-                const innerRingRadius = 2.5;
-                const outerRingRadius = 4.5;
-                const tiltAngle = Math.PI / 4; // 45 degrees in radians
-
-                let idx = 0;
-
-                // Saturn Core (Sphere)
+                // Core
                 for (let i = 0; i < coreParticles; i++) {
-                    const r = Math.random() * coreRadius;
+                    const r = Math.random() * 1.5;
                     const theta = Math.random() * Math.PI * 2;
                     const phi = Math.acos(2 * Math.random() - 1);
                     setPos(idx++, r * Math.sin(phi) * Math.cos(theta), r * Math.sin(phi) * Math.sin(theta), r * Math.cos(phi));
                 }
 
-                // Saturn Ring (Disk with tilt)
+                // Ring
                 for (let i = 0; i < ringParticles; i++) {
                     const angle = Math.random() * Math.PI * 2;
-                    const r = innerRingRadius + Math.random() * (outerRingRadius - innerRingRadius);
-                    const yOffset = (Math.random() - 0.5) * 0.1; // Thin ring
-
-                    let x = r * Math.cos(angle);
-                    let y = yOffset;
-                    let z = r * Math.sin(angle);
-
-                    // Apply 45-degree tilt around the X-axis
-                    const tiltedY = y * Math.cos(tiltAngle) - z * Math.sin(tiltAngle);
-                    const tiltedZ = y * Math.sin(tiltAngle) + z * Math.cos(tiltAngle);
+                    const r = 2.5 + Math.random() * 2.0;
                     
-                    setPos(idx++, x, tiltedY, tiltedZ);
+                    // Start flat on XY
+                    let x = r * Math.cos(angle);
+                    let y = r * Math.sin(angle);
+                    let z = (Math.random() - 0.5) * 0.1;
+
+                    // Rotate around X axis to tilt 45 degrees
+                    const ty = y * Math.cos(tiltAngle) - z * Math.sin(tiltAngle);
+                    const tz = y * Math.sin(tiltAngle) + z * Math.cos(tiltAngle);
+                    
+                    setPos(idx++, x, ty, tz);
                 }
 
-            } else if (shape === 'christmasTree') { // NEW: Christmas Tree
-                const treeHeight = 5;
-                const coneLayers = 4;
+            } else if (shape === 'christmasTree') {
+                // Tree: Growing UP along +Z
+                const treeHeight = 6;
+                const coneLayers = 5;
                 const particlesPerLayer = Math.floor(PARTICLE_COUNT * 0.8 / coneLayers);
                 const starParticles = Math.floor(PARTICLE_COUNT * 0.05);
                 const ornamentParticles = PARTICLE_COUNT - coneLayers * particlesPerLayer - starParticles;
 
-                let idx = 0;
-
-                // Tree Layers (Cones)
                 for (let layer = 0; layer < coneLayers; layer++) {
-                    const yBase = -treeHeight / 2 + (layer / coneLayers) * treeHeight * 0.8; // Lower layers wider
-                    const radius = (1 - layer / coneLayers) * 2; // Radius decreases with height
+                    // Z base
+                    const zBase = -2 + (layer / coneLayers) * treeHeight * 0.8;
+                    const radius = (1 - layer / coneLayers) * 2.5;
                     const height = treeHeight / coneLayers * 1.5;
 
                     for (let i = 0; i < particlesPerLayer; i++) {
-                        const r = Math.sqrt(Math.random()) * radius; // Dense center
+                        const r = Math.sqrt(Math.random()) * radius;
                         const theta = Math.random() * Math.PI * 2;
-                        const y = yBase + Math.random() * height * 0.8; // Vary height within layer
+                        const z = zBase + Math.random() * height * 0.8;
 
-                        setPos(idx++, r * Math.cos(theta), y, r * Math.sin(theta));
+                        setPos(idx++, r * Math.cos(theta), r * Math.sin(theta), z);
                     }
                 }
 
-                // Star on top
+                // Star (Atop Z)
                 for (let i = 0; i < starParticles; i++) {
-                    const r = Math.random() * 0.3; // Star size
+                    const r = Math.random() * 0.4;
                     const theta = Math.random() * Math.PI * 2;
                     const phi = Math.acos(2 * Math.random() - 1);
                     setPos(idx++, 
                         r * Math.sin(phi) * Math.cos(theta), 
-                        treeHeight / 2 + 0.5 + r * Math.sin(phi) * Math.sin(theta), // Place above tree
-                        r * Math.cos(phi)
+                        r * Math.sin(phi) * Math.sin(theta),
+                        3.5 + r * Math.cos(phi) // Top of tree Z=3.5
                     );
                 }
 
-                // Ornaments (random spheres on tree)
+                // Ornaments
                 for (let i = 0; i < ornamentParticles; i++) {
                     const layer = Math.floor(Math.random() * coneLayers);
-                    const yBase = -treeHeight / 2 + (layer / coneLayers) * treeHeight * 0.8;
-                    const radius = (1 - layer / coneLayers) * 2;
+                    const zBase = -2 + (layer / coneLayers) * treeHeight * 0.8;
+                    const radius = (1 - layer / coneLayers) * 2.5;
 
-                    const r = Math.random() * radius * 0.8;
+                    const r = Math.random() * radius * 0.9; 
                     const theta = Math.random() * Math.PI * 2;
-                    const y = yBase + Math.random() * (treeHeight / coneLayers * 1.5) ;
-
-                    setPos(idx++, r * Math.cos(theta), y, r * Math.sin(theta));
+                    const z = zBase + Math.random() * (treeHeight / coneLayers * 1.5);
+                    
+                    setPos(idx++, r * Math.cos(theta), r * Math.sin(theta), z);
                 }
+
+            } else if (shape === 'fireworks') {
+                // Fireworks: Shooting UP Z axis
+                 const trailCount = 80;
+                 const particlesPerTrail = Math.floor(PARTICLE_COUNT / trailCount);
+                 
+                 for (let t = 0; t < trailCount; t++) {
+                     const theta = Math.random() * Math.PI * 2;
+                     const phi = Math.acos(2 * Math.random() - 1);
+                     
+                     const dx = Math.sin(phi) * Math.cos(theta);
+                     const dy = Math.sin(phi) * Math.sin(theta);
+                     const dz = Math.cos(phi);
+ 
+                     const maxLen = 3 + Math.random() * 3;
+ 
+                     for (let p = 0; p < particlesPerTrail; p++) {
+                         const progress = p / particlesPerTrail; 
+                         const dist = progress * maxLen;
+                         const gravity = progress * progress * -1.5; // Falls down Z
+ 
+                         setPos(idx++, 
+                             dx * dist + (Math.random()-0.5)*0.1, 
+                             dy * dist + (Math.random()-0.5)*0.1, 
+                             dz * dist + gravity + (Math.random()-0.5)*0.1 // Gravity on Z
+                         );
+                     }
+                 }
             }
             
             targetPositions = positions;
         }
 
-        // --- UI Setup (English Naming) ---
         function initGUI() {
             const gui = new GUI();
             gui.title('Control Panel');
@@ -357,22 +354,21 @@
                 'Heart': 'heart',
                 'Flower': 'flower',
                 'Solar System': 'solar',
-                'Saturn': 'saturn', // Updated
+                'Saturn': 'saturn',
                 'Fireworks': 'fireworks',
-                'Christmas Tree': 'christmasTree' // New
+                'Christmas Tree': 'christmasTree'
             };
 
             gui.add(params, 'shape', shapeList).name('Select Model').onChange(val => {
                 currentShape = val;
                 calculateTargetPositions(val);
                 
-                // Automatic color matching
                 if(val === 'heart') params.color = '#ff0055';
                 else if(val === 'solar') params.color = '#ffaa00';
-                else if(val === 'saturn') params.color = '#e0c0a0'; // Earthy tones for Saturn
+                else if(val === 'saturn') params.color = '#e0c0a0'; 
                 else if(val === 'flower') params.color = '#ff66aa';
                 else if(val === 'fireworks') params.color = '#ffffff';
-                else if(val === 'christmasTree') params.color = '#00ff00'; // Green for Christmas tree
+                else if(val === 'christmasTree') params.color = '#00ff00';
 
                 material.color.set(params.color);
             });
@@ -386,7 +382,6 @@
             });
         }
 
-        // --- Camera and Gesture ---
         function initMediaPipe() {
             const videoElement = document.getElementById('video-input');
             const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
@@ -415,7 +410,6 @@
             cameraUtils.start().then(() => document.getElementById('loading').style.display = 'none');
         }
 
-        // --- Animation Loop ---
         function animate() {
             requestAnimationFrame(animate);
             const time = clock.getElapsedTime();
@@ -457,15 +451,10 @@
 
             geometry.attributes.position.needsUpdate = true;
             
-            // --- Model Specific Rotations ---
+            // --- UNIFIED Z-AXIS ROTATION ---
+            // Because we set Z as UP, rotating around Z means spinning like a top.
             if(gestureState === 'neutral') {
-                if (currentShape === 'heart') {
-                    particleSystem.rotation.z += 0.001; // Heart: Rotate around Z-axis
-                } else if (currentShape === 'saturn') {
-                    particleSystem.rotation.y += 0.001; // Saturn: Rotate around Y-axis
-                } else {
-                    particleSystem.rotation.y += 0.001; // Default: Rotate around Y-axis
-                }
+                particleSystem.rotation.z += 0.002;
             }
 
             renderer.render(scene, camera);
